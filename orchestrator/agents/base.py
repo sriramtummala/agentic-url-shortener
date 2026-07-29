@@ -12,6 +12,7 @@ Protocol, which is what makes the agent layer pluggable.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Protocol
 
 from orchestrator.models import ArtifactRef, RunState, TaskGraph
@@ -25,10 +26,20 @@ class AgentContext:
     graph: TaskGraph
     run_state: RunState
     upstream_artifacts: list[ArtifactRef]
+    artifact_root: Path
+    """Root directory upstream artifact files live under -- combined with
+    an ArtifactRef.path, this is what lets an agent actually read what an
+    earlier stage produced rather than just seeing its metadata."""
     scenario_input: dict
     """Free-form scenario configuration (e.g. path to the raw requirement
     text, prior scenario's final artifact set for brownfield/ambiguous
     runs). Agents interpret the keys they care about."""
+
+    def read_artifact(self, artifact: ArtifactRef) -> str:
+        return (self.artifact_root / artifact.path).read_text(encoding="utf-8")
+
+    def upstream_by_kind(self, kind: str) -> list[ArtifactRef]:
+        return [a for a in self.upstream_artifacts if a.kind == kind]
 
 
 @dataclass

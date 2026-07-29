@@ -126,6 +126,17 @@ class StateStore:
                 (status, updated_at, run_id),
             )
 
+    def update_graph(self, run_id: str, graph: TaskGraph, updated_at: str) -> None:
+        """Persist a mutated graph snapshot for an in-progress run (e.g. a
+        stage inserted by dynamic re-planning). Executor.run() reloads the
+        graph from here at the start of every pass, so this is the only
+        place graph mutations need to land."""
+        with self._lock, self._conn:
+            self._conn.execute(
+                "UPDATE runs SET graph_json = ?, updated_at = ? WHERE run_id = ?",
+                (graph.model_dump_json(), updated_at, run_id),
+            )
+
     def load_graph(self, run_id: str) -> TaskGraph:
         with self._lock:
             row = self._conn.execute(

@@ -15,7 +15,9 @@ from __future__ import annotations
 import argparse
 import sys
 from datetime import datetime, timezone
+from pathlib import Path
 
+from orchestrator.observability import generate_run_report, render_report_markdown
 from orchestrator.state_store import StateStore
 
 
@@ -78,6 +80,28 @@ def _cmd_decisions(args, store: StateStore) -> int:
     return 0
 
 
+def _cmd_metrics(args, store: StateStore) -> int:
+    report = generate_run_report(store, args.run_id)
+    print(f"run {report['run_id']} ({report['scenario']}) status={report['status']}")
+    print(f"  end_to_end_latency_seconds = {report['end_to_end_latency_seconds']:.3f}")
+    print(f"  success_rate               = {report['success_rate']}")
+    print(f"  retry                      = {report['retry']}")
+    print(f"  rollback                   = {report['rollback']}")
+    print(f"  mean_time_to_recovery_secs = {report['mean_time_to_recovery_seconds']}")
+    return 0
+
+
+def _cmd_report(args, store: StateStore) -> int:
+    report = generate_run_report(store, args.run_id)
+    markdown = render_report_markdown(report)
+    if args.out:
+        Path(args.out).write_text(markdown, encoding="utf-8")
+        print(f"wrote report to {args.out}")
+    else:
+        print(markdown)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="orchestrator", description="Inspect runs and resolve approval checkpoints")
     parser.add_argument("--db", default="orchestrator_state.db", help="path to the run's SQLite state file")
@@ -110,6 +134,15 @@ def build_parser() -> argparse.ArgumentParser:
     p_decisions.add_argument("run_id")
     p_decisions.add_argument("--stage", default=None)
     p_decisions.set_defaults(func=_cmd_decisions)
+
+    p_metrics = sub.add_parser("metrics", help="print reliability metrics for a run")
+    p_metrics.add_argument("run_id")
+    p_metrics.set_defaults(func=_cmd_metrics)
+
+    p_report = sub.add_parser("report", help="render a markdown audit report for a run")
+    p_report.add_argument("run_id")
+    p_report.add_argument("--out", default=None, help="write markdown to this path instead of stdout")
+    p_report.set_defaults(func=_cmd_report)
 
     return parser
 

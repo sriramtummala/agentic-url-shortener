@@ -22,7 +22,7 @@ class _Clock:
 
     def now(self) -> str:
         self.n += 1
-        return f"2026-07-28T00:{self.n:04d}Z"
+        return f"2026-07-28T00:{self.n // 60:02d}:{self.n % 60:02d}Z"
 
 
 class _Ids:

@@ -102,6 +102,11 @@ class Executor:
     # -- public entry points ------------------------------------------------
 
     def run(self) -> RunState:
+        # Reload rather than trust the graph passed at construction time:
+        # dynamic re-planning (orchestrator.replanning) mutates the
+        # persisted graph between calls, and this is the one place that
+        # change becomes visible without having to build a new Executor.
+        self.graph = self.store.load_graph(self.run_id)
         run_state = self.store.load_run(self.run_id)
         if run_state.status == RunStatus.PAUSED_SAFE_STOP:
             # Safe-stop is sticky: it stays halted across calls until an
@@ -248,6 +253,7 @@ class Executor:
                     graph=self.graph,
                     run_state=self.store.load_run(self.run_id),
                     upstream_artifacts=self._collect_upstream_artifacts(stage),
+                    artifact_root=self.artifact_root,
                     scenario_input=self.scenario_input,
                 )
                 try:

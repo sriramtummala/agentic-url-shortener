@@ -122,8 +122,8 @@ gate would otherwise have silently stayed "approved."
 `PolicyGuardrailEngine` dispatches each POLICY/AUTOMATED_CHECK `GateSpec` to
 a named rule (`config={"rule": "secret_scan"}`, etc.) and fails closed on
 an unregistered rule name -- a misconfigured guardrail must never silently
-become a no-op. The PII scanner is a direct, deliberate nod to QuikTrip's
-own data-handling policy (no PII/PCI/PHI in tooling inputs): it blocks
+become a no-op. The PII scanner enforces a general good-practice
+data-handling policy (no PII/PCI/PHI in tooling inputs): it blocks
 SSN-shaped and card-number-shaped literals from ever landing in a generated
 artifact.
 

@@ -93,7 +93,7 @@ NORMALIZED_REQUIREMENT = {
             "rationale": (
                 "Raw counts plus daily buckets covers the stated need ('how many times') without "
                 "requiring visitor identification, which would raise its own data-handling questions "
-                "QT would need to sign off on separately."
+                "that would need separate sign-off."
             ),
         },
         {

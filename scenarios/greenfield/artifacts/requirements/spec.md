@@ -23,7 +23,7 @@ Provide a self-service HTTP API that converts long URLs into short, shareable co
   **Rationale:** ~3.5 trillion possible codes at 7 characters is enough for a first release without needing a longer code, and base62 keeps the resulting URL compact and URL-safe.
 - **Q:** What does 'see how many times it's used' mean exactly -- unique visitors, raw hits, a time-series breakdown?
   **Resolution:** Track a raw click count plus a per-day time series and last-accessed timestamp. Unique-visitor dedup and referrer/geo breakdown are out of scope.
-  **Rationale:** Raw counts plus daily buckets covers the stated need ('how many times') without requiring visitor identification, which would raise its own data-handling questions QT would need to sign off on separately.
+  **Rationale:** Raw counts plus daily buckets covers the stated need ('how many times') without requiring visitor identification, which would raise its own data-handling questions that would need separate sign-off.
 - **Q:** What does 'reliable' mean in measurable terms (uptime target, latency budget)?
   **Resolution:** No formal SLA for the prototype; the implementation targets a fast in-process cache on the redirect hot-path and exposes a health check so a real SLA can be set once there's traffic to measure against.
   **Rationale:** The ask gives no target number, and inventing one wouldn't be defensible. Optimizing the hot path and exposing health/observability is the honest response to 'reliable' without a stated number.

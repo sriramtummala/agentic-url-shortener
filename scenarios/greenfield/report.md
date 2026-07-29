@@ -3,14 +3,14 @@
 - Scenario: `greenfield`
 - Status: **completed**
 - Created: 2026-07-29T02:10:49.492804+00:00
-- Updated: 2026-07-29T02:40:00.759669+00:00
-- End-to-end latency: 1751.267s
+- Updated: 2026-07-29T03:13:40.676703+00:00
+- End-to-end latency: 3771.184s
 - Success rate: 100.0%
 - Retries: 0 across 0 stage(s)
 - Rollbacks: 0 across 0 stage(s)
 - MTTR: n/a (no recoveries observed)
-- Decisions recorded: 40
-- Audit events recorded: 48
+- Decisions recorded: 41
+- Audit events recorded: 50
 
 ## Stages
 

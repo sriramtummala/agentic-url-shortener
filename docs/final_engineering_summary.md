@@ -103,12 +103,12 @@ SQLite connections; a static denylist with no moderation/appeals workflow
 than synthesize; safe-stop is checkpoint-boundary, not mid-instruction
 preemption; and the operator CLI is scriptable, not a dashboard.
 
-## What a QuikTrip reviewer should do next
+## What a reviewer should do next
 
 This is a prototype built for an evaluation exercise, not a production
 deployment decision -- the choices above (SQLite, in-process primitives, a
 static denylist) were made for that context and should be revisited before
-any real production use. A QT engineer should:
+any real production use. A reviewing engineer should:
 1. Run the test suite and the three scenarios themselves (`README.md` has
    exact commands) to verify these claims rather than taking this document
    at face value.
@@ -117,5 +117,5 @@ any real production use. A QT engineer should:
    pattern -- that's a cost/reproducibility trade-off a human should own.
 3. Treat every "Approved" decision recorded in this session's scenario
    runs as what it is: a review performed inside this exercise, not a
-   substitute for whatever QT's actual change-management process requires
-   before real deployment.
+   substitute for whatever the organization's actual change-management
+   process requires before real deployment.

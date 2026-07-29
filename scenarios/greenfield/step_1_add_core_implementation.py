@@ -1,14 +1,16 @@
-"""Task 13 step: insert the documentation and release-readiness stages now
-that the feature set (core APIs, analytics, reliability) and service/README
-are all in place.
+"""Step 1: insert the implementation and test stages into the live
+greenfield run now that the core API code (service/app) and its test suite
+(service/tests) exist, and execute them.
 
-release_readiness is high_impact=True with an APPROVAL entry gate -- it is
-NOT auto-approved here. Running this script will normally end with the run
-PAUSED_APPROVAL; a human decides whether to approve or reject it separately
-via orchestrator.cli (see scenarios/greenfield/report.md and the printed
-pending-approval id for what to run next).
+The insert_stage calls are attributed to actor="agent:engineering" -- this
+is an agent-side judgment call ("this code is ready to apply"), not a human
+sign-off, so it deliberately does not use the "human:" actor prefix that
+StateStore.resolve_approval enforces for real approval-gate decisions.
 
-Usage: python -m scenarios.greenfield.step_13_add_docs_and_release_gate
+Idempotent: re-running this after the stages already exist just re-runs the
+executor (insert_stage is skipped, not repeated).
+
+Usage: python -m scenarios.greenfield.step_1_add_core_implementation
 """
 
 from __future__ import annotations
@@ -24,6 +26,15 @@ from scenarios.greenfield.run import ARTIFACT_ROOT, REPORT_PATH, RUN_ID, STATE_D
 
 ACTOR = "agent:engineering"
 
+CODE_GATES = [
+    GateSpec(id="secret-scan", type=GateType.POLICY, description="scan for hardcoded secrets",
+             config={"rule": "secret_scan"}),
+    GateSpec(id="dangerous-code-scan", type=GateType.POLICY, description="block dangerous constructs",
+             config={"rule": "no_dangerous_code"}),
+    GateSpec(id="pii-scan", type=GateType.POLICY, description="scan for PII-shaped values",
+             config={"rule": "pii_scan"}),
+]
+
 
 def apply() -> None:
     store = StateStore(STATE_DB)
@@ -31,34 +42,25 @@ def apply() -> None:
         replanner = Replanner(store)
         graph = store.load_graph(RUN_ID)
 
-        if "documentation" not in graph.stages:
+        if "implementation" not in graph.stages:
             replanner.insert_stage(
                 RUN_ID,
                 StageDefinition(
-                    id="documentation", name="Documentation", agent="documentation",
-                    depends_on=["design"], produces=["doc"],
+                    id="implementation", name="Implementation", agent="implementation",
+                    depends_on=["design"], produces=["code"], exit_gates=CODE_GATES,
                 ),
                 before_stage_ids=[],
-                reason="service/README.md is ready to apply",
+                reason="core API implementation (create/redirect/metadata/delete) is ready to apply",
                 actor=ACTOR,
             )
 
         graph = store.load_graph(RUN_ID)
-        if "release_readiness" not in graph.stages:
+        if "test" not in graph.stages:
             replanner.insert_stage(
                 RUN_ID,
-                StageDefinition(
-                    id="release_readiness", name="Release Readiness", agent="release_readiness",
-                    depends_on=["implementation", "test", "documentation"],
-                    high_impact=True,
-                    entry_gates=[
-                        GateSpec(id="release-approval", type=GateType.APPROVAL,
-                                 description="human sign-off required before release"),
-                    ],
-                ),
+                StageDefinition(id="test", name="Test", agent="test", depends_on=["design"], produces=["test"]),
                 before_stage_ids=[],
-                reason="full feature set (core APIs, analytics, reliability) and docs are complete; "
-                       "ready for release-readiness review",
+                reason="core API test suite is ready to apply",
                 actor=ACTOR,
             )
 
@@ -72,12 +74,6 @@ def apply() -> None:
         print(f"run status: {final.status.value}")
         for stage_id, state in final.stage_states.items():
             print(f"  {stage_id:24s} {state.status.value:16s} error={state.error or ''}")
-
-        pending = store.get_pending_approvals(RUN_ID)
-        if pending:
-            print("\npending approval(s):")
-            for p in pending:
-                print(f"  id={p['id']} stage={p['stage_id']} gate={p['gate_id']} requested_at={p['requested_at']}")
 
         REPORT_PATH.write_text(render_report_markdown(generate_run_report(store, RUN_ID)), encoding="utf-8")
     finally:

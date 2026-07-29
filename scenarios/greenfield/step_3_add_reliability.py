@@ -1,9 +1,9 @@
-"""Task 11 step: reliability hardening (rate limiting, idempotency, redirect
-cache, health check) has been added to service/app. Same pattern as Task 10
+"""Step 3: reliability hardening (rate limiting, idempotency, redirect
+cache, health check) has been added to service/app. Same pattern as step 2
 -- the implementation and test stages already passed, so this is a re-plan
 (invalidate + re-execute), not a fresh insert.
 
-Usage: python -m scenarios.greenfield.step_11_add_reliability
+Usage: python -m scenarios.greenfield.step_3_add_reliability
 """
 
 from __future__ import annotations

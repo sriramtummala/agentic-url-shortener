@@ -81,10 +81,10 @@ reliability hardening, then docs/release) becomes ready.
 
 ```bash
 python -m scenarios.greenfield.run                              # requirements + design
-python -m scenarios.greenfield.step_09_add_core_implementation   # + implementation, test
-python -m scenarios.greenfield.step_10_add_analytics             # re-plan: analytics added
-python -m scenarios.greenfield.step_11_add_reliability           # re-plan: reliability added
-python -m scenarios.greenfield.step_13_add_docs_and_release_gate # + documentation, release gate
+python -m scenarios.greenfield.step_1_add_core_implementation    # + implementation, test
+python -m scenarios.greenfield.step_2_add_analytics              # re-plan: analytics added
+python -m scenarios.greenfield.step_3_add_reliability            # re-plan: reliability added
+python -m scenarios.greenfield.step_4_add_docs_and_release_gate  # + documentation, release gate
 ```
 
 The last step pauses at `PAUSED_APPROVAL` on `release_readiness` (a

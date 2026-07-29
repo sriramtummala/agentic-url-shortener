@@ -1,6 +1,6 @@
-"""Task 10 step: analytics (click tracking, per-day series, GET
+"""Step 2: analytics (click tracking, per-day series, GET
 /api/urls/{code}/analytics) has been added to service/app. The
-implementation and test stages already passed once in Task 9 -- this is a
+implementation and test stages already passed once in step 1 -- this is a
 genuine "upstream input changed" case, not a fresh run, so it goes through
 Replanner.invalidate_downstream rather than insert_stage: the stages are
 marked stale and re-execute, re-applying the now-expanded code/tests.
@@ -10,7 +10,7 @@ service/tests off disk on every call, so nothing else needs updating here --
 re-running the executor after invalidation picks up the new files
 automatically.
 
-Usage: python -m scenarios.greenfield.step_10_add_analytics
+Usage: python -m scenarios.greenfield.step_2_add_analytics
 """
 
 from __future__ import annotations

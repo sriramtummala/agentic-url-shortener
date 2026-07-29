@@ -10,9 +10,10 @@ independently of the orchestration mechanics.
 SOURCE_FILES / TEST_FILES read the real, living code under service/app and
 service/tests off disk rather than duplicating it here -- the orchestrator
 artifact is a faithful snapshot of the actual repo code, not a second copy
-that could drift from it. Their contents grow as later tasks (Task 9: core
-APIs, Task 10: analytics, Task 11: reliability) add files under those
-directories; DOC_FILES is added in Task 13.
+that could drift from it. Their contents grow as later steps (see
+step_1_add_core_implementation.py, step_2_add_analytics.py,
+step_3_add_reliability.py) add files under those directories; DOC_FILES is
+added in step_4_add_docs_and_release_gate.py.
 """
 
 from pathlib import Path

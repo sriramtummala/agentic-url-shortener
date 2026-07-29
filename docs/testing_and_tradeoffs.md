@@ -54,7 +54,7 @@ inspecting real output, not assumed away.
    leftover `PAUSED_APPROVAL` run status before re-checking layers, so it
    bailed out immediately even though nothing was still blocked. Fixed in
    `executor.py`'s `run()`; caught by `test_high_impact_stage_blocks_on_approval_then_resumes`
-   during initial development (Task 2), before it ever reached a real scenario.
+   during the executor's own development, before it ever reached a real scenario.
 3. **Connection leak in the orchestrator test suite.** Several test files
    never closed their `StateStore`'s sqlite3 connection, producing
    `ResourceWarning`s. Fixed with a single autouse fixture in
@@ -75,7 +75,7 @@ inspecting real output, not assumed away.
 5. **Stale approvals silently carrying forward across re-planning.**
    Approval ids were scoped only to `(run, stage, gate)`, so invalidating a
    stage that had already been approved (e.g. re-syncing greenfield's
-   `implementation` stage after Task 12 added test files) would leave the
+   `implementation` stage after its test suite grew) would leave the
    *old* approval in place, which the next execution would silently honor
    -- a real change-control violation (approving version N shouldn't
    approve version N+1). Fixed by adding a `StageState.incarnation` counter

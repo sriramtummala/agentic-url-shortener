@@ -73,6 +73,17 @@ def _default_id() -> str:
     return uuid.uuid4().hex[:12]
 
 
+def _latest_by_path(artifacts: list[ArtifactRef]) -> list[ArtifactRef]:
+    """artifacts is often a full history (every version of every path,
+    across every re-execution) -- collapse to the newest version per path."""
+    latest: dict[str, ArtifactRef] = {}
+    for artifact in artifacts:
+        current = latest.get(artifact.path)
+        if current is None or artifact.version > current.version:
+            latest[artifact.path] = artifact
+    return list(latest.values())
+
+
 class Executor:
     def __init__(
         self,
@@ -217,7 +228,24 @@ class Executor:
 
     def _execute_stage(self, stage_id: str) -> None:
         stage = self.graph.stages[stage_id]
-        incarnation = self.store.load_run(self.run_id).stage_states[stage_id].incarnation
+        stage_state = self.store.load_run(self.run_id).stage_states[stage_id]
+        incarnation = stage_state.incarnation
+
+        if (
+            stage_state.status == StageStatus.BLOCKED_APPROVAL
+            and not stage_state.stale
+            and stage_state.artifact_ids
+        ):
+            # Blocked on an EXIT gate after the agent already ran and
+            # produced artifacts (an ENTRY-gate block has no artifacts yet,
+            # since the agent never got to run). Resuming should re-check
+            # the gate against that existing output, not re-run the agent --
+            # re-running would be wasted work at best and, for a
+            # non-deterministic/paid agent (e.g. the Claude adapter), a
+            # second real cost incurred purely from checking on approval
+            # status at worst.
+            self._recheck_blocked_exit_gate(stage_id, stage, incarnation)
+            return
 
         entry_result = self.gate_runner.evaluate(self.run_id, stage, stage.entry_gates, "entry", incarnation)
         if entry_result.blocked:
@@ -312,6 +340,20 @@ class Executor:
             self._fail_stage_and_propagate(stage_id, error=failure_reason, attempts=attempts_used)
             return
 
+    def _recheck_blocked_exit_gate(self, stage_id: str, stage: StageDefinition, incarnation: int) -> None:
+        artifacts = _latest_by_path(self.store.get_artifacts(self.run_id, stage_id=stage_id))
+        exit_result = self.gate_runner.evaluate(self.run_id, stage, stage.exit_gates, "exit", incarnation, artifacts)
+        if exit_result.blocked:
+            return  # still pending -- nothing changed, stay blocked
+        if exit_result.passed:
+            self._pass_stage(stage_id, "approved on re-check; no re-execution needed")
+            return
+        self._log_decision(
+            stage_id, actor=f"gate:{exit_result.gate_id}",
+            action="exit_gate_failed", rationale=exit_result.reason,
+        )
+        self._fail_stage_and_propagate(stage_id, error=exit_result.reason)
+
     # -- stage state transitions ---------------------------------------------
 
     def _update_stage(self, stage_id: str, **fields) -> StageState:
@@ -396,13 +438,10 @@ class Executor:
         # version per path so a re-planned stage's agent, or a downstream
         # agent reading upstream_by_kind, never sees a stale duplicate
         # alongside the current one.
-        latest_by_path: dict[str, ArtifactRef] = {}
+        artifacts: list[ArtifactRef] = []
         for dep in stage.depends_on:
-            for artifact in self.store.get_artifacts(self.run_id, stage_id=dep):
-                current = latest_by_path.get(artifact.path)
-                if current is None or artifact.version > current.version:
-                    latest_by_path[artifact.path] = artifact
-        return list(latest_by_path.values())
+            artifacts.extend(self.store.get_artifacts(self.run_id, stage_id=dep))
+        return _latest_by_path(artifacts)
 
     def _persist_artifacts(self, stage_id: str, outputs: list[AgentOutput]) -> list[ArtifactRef]:
         existing = self.store.get_artifacts(self.run_id, stage_id=stage_id)

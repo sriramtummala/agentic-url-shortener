@@ -1,40 +1,38 @@
-Coverage snapshot -- captured after Task 12 (2026-07-29)
+Coverage snapshot -- captured after Phase 5 (2026-07-29), final state
 Command: pytest orchestrator/tests service/tests --cov=orchestrator --cov=service --cov-report=term-missing
 
 Name                                               Stmts   Miss  Cover   Missing
 --------------------------------------------------------------------------------
-orchestrator\__init__.py                               0      0   100%
-orchestrator\agents\__init__.py                        0      0   100%
 orchestrator\agents\base.py                           36      1    97%   39
 orchestrator\agents\claude_adapter.py                 54      6    89%   45, 61-65
 orchestrator\agents\deterministic.py                 104      6    94%   92, 142, 158, 171, 217, 224
 orchestrator\agents\registry.py                        4      0   100%
 orchestrator\cli.py                                  111     20    82%   31-32, 52-53, 84-91, 95-102, 161
-orchestrator\executor.py                             235     16    93%   124, 137-138, 156, 180, 209, 211, 247, 261-262, 271-276, 297, 356, 442
-orchestrator\gates.py                                 54      2    96%   56, 81
+orchestrator\executor.py                             256     15    94%   135, 148-149, 168, 193, 222, 224, 278, 292-293, 328, 351-355, 401, 484
+orchestrator\gates.py                                 54      1    98%   56
 orchestrator\guardrails.py                            63      2    97%   110, 128
-orchestrator\models.py                               157      3    98%   126, 131, 172
+orchestrator\models.py                               159      3    98%   132, 137, 178
 orchestrator\observability.py                         67      3    96%   40, 53, 92
-orchestrator\replanning.py                            64      1    98%   66
+orchestrator\replanning.py                            67      1    99%   67
 orchestrator\state_store.py                          105      3    97%   146, 155, 306
 service\app\api\analytics.py                          13      0   100%
 service\app\api\health.py                             11      0   100%
-service\app\api\redirect.py                           25      1    96%   23
-service\app\api\urls.py                               51      2    96%   41-42
+service\app\api\redirect.py                           27      1    96%   23
+service\app\api\urls.py                               64      2    97%   52-53
 service\app\cache.py                                  26      0   100%
 service\app\codegen.py                                11      0   100%
-service\app\config.py                                  9      0   100%
-service\app\db.py                                     52      0   100%
+service\app\config.py                                 11      0   100%
+service\app\db.py                                     63      0   100%
+service\app\denylist.py                                3      0   100%
 service\app\dependencies.py                           15      0   100%
 service\app\idempotency.py                            22      0   100%
 service\app\main.py                                   20      0   100%
 service\app\rate_limiter.py                           19      0   100%
-service\app\schemas.py                                20      0   100%
+service\app\schemas.py                                21      0   100%
 --------------------------------------------------------------------------------
-TOTAL (application code only, test files excluded from this summary)
 
 Application-code total: 97% line coverage across orchestrator/ and service/app/.
-94 tests passed, 0 failures, 0 ResourceWarnings.
+108 tests passed, 0 failures, 0 ResourceWarnings.
 
 Notable uncovered lines (all non-critical, by design):
 - orchestrator/cli.py: a handful of CLI branches not exercised by the test

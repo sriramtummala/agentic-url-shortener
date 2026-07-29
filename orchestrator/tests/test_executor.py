@@ -257,6 +257,44 @@ def test_high_impact_stage_blocks_on_approval_then_resumes(tmp_path):
     assert final.stage_states["release"].status == StageStatus.PASSED
 
 
+def test_exit_gate_approval_resume_does_not_rerun_agent(tmp_path):
+    # An entry-gate block means the agent never ran; an exit-gate block
+    # means it already ran and produced output. Resuming the latter must
+    # re-check the gate against that existing output, not re-invoke the
+    # agent -- for a real (non-deterministic, possibly paid) agent that
+    # would be a wasted or double-billed call every time someone checks on
+    # approval status.
+    agent = SucceedAgent()
+    graph = TaskGraph(
+        id="exit-approval",
+        stages={
+            "requirements": StageDefinition(
+                id="requirements", name="Requirements", agent="succeed",
+                high_impact=True,
+                exit_gates=[GateSpec(id="interp-approval", type=GateType.APPROVAL, description="sign-off")],
+            ),
+        },
+    )
+    executor, store, run_id = _new_executor(graph, {"succeed": agent}, tmp_path)
+
+    paused = executor.run()
+    assert paused.status == RunStatus.PAUSED_APPROVAL
+    assert len(agent.calls) == 1
+
+    # Resuming while still pending must not re-run the agent either.
+    still_paused = executor.run()
+    assert still_paused.status == RunStatus.PAUSED_APPROVAL
+    assert len(agent.calls) == 1
+
+    pending = store.get_pending_approvals(run_id)
+    store.resolve_approval(pending[0]["id"], "approved", "human:reviewer", "2026-07-28T00:9999Z", comment="ok")
+    final = executor.run()
+
+    assert final.status == RunStatus.COMPLETED
+    assert final.stage_states["requirements"].status == StageStatus.PASSED
+    assert len(agent.calls) == 1  # still just the one real execution
+
+
 def test_high_impact_stage_rejected_fails_and_does_not_run(tmp_path):
     graph = TaskGraph(
         id="rejection",

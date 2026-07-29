@@ -282,6 +282,19 @@ class StateStore:
         resolved_at: str,
         comment: Optional[str] = None,
     ) -> None:
+        # Structural governance: an approval checkpoint exists specifically
+        # so a *human* signs off on a high-impact action. Requiring the
+        # "human:" prefix here -- the single choke point every resolver
+        # (CLI, future UI, tests) must pass through -- makes agent
+        # self-approval impossible rather than merely discouraged.
+        if not resolved_by.startswith("human:"):
+            raise ValueError(
+                f"approval must be resolved by a human actor (expected 'human:<name>', got '{resolved_by}')"
+            )
+        if status not in ("approved", "rejected"):
+            raise ValueError(f"approval status must be 'approved' or 'rejected', got '{status}'")
+        if status == "rejected" and not comment:
+            raise ValueError("a rejected approval must include a rationale comment")
         with self._lock, self._conn:
             self._conn.execute(
                 """UPDATE approvals SET status = ?, resolved_by = ?, resolved_at = ?,

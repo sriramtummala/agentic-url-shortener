@@ -32,3 +32,7 @@ class LRUCache:
     def invalidate(self, key: str) -> None:
         with self._lock:
             self._data.pop(key, None)
+
+    def __len__(self) -> int:
+        with self._lock:
+            return len(self._data)

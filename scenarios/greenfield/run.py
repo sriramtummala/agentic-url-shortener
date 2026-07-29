@@ -34,9 +34,14 @@ def build_scenario_input() -> dict:
         "normalized_requirement": si.NORMALIZED_REQUIREMENT,
         "design": si.DESIGN,
     }
-    for optional_key in ("SOURCE_FILES", "TEST_FILES", "DOC_FILES"):
-        if hasattr(si, optional_key):
-            scenario_input[optional_key.lower()] = getattr(si, optional_key)
+    source_files = si.source_files()
+    if source_files:
+        scenario_input["source_files"] = source_files
+    test_files = si.test_files()
+    if test_files:
+        scenario_input["test_files"] = test_files
+    if hasattr(si, "DOC_FILES"):
+        scenario_input["doc_files"] = si.DOC_FILES
     return scenario_input
 
 

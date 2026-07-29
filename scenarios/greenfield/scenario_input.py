@@ -7,11 +7,41 @@ deterministic agents just format these into artifacts; the judgment calls
 live here, in plain reviewable data, so they can be read/edited/argued with
 independently of the orchestration mechanics.
 
-SOURCE_FILES / TEST_FILES / DOC_FILES are added in later tasks (Task 9:
-core APIs, Task 10: analytics, Task 11: reliability) as the implementation/
-test/documentation stages are inserted into the running graph and their
-scope grows -- see scenarios/greenfield/run.py.
+SOURCE_FILES / TEST_FILES read the real, living code under service/app and
+service/tests off disk rather than duplicating it here -- the orchestrator
+artifact is a faithful snapshot of the actual repo code, not a second copy
+that could drift from it. Their contents grow as later tasks (Task 9: core
+APIs, Task 10: analytics, Task 11: reliability) add files under those
+directories; DOC_FILES is added in Task 13.
 """
+
+from pathlib import Path
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_SERVICE_APP_ROOT = _REPO_ROOT / "service" / "app"
+_SERVICE_TESTS_ROOT = _REPO_ROOT / "service" / "tests"
+
+
+def _read_tree(root: Path) -> dict:
+    """Read every .py file under root into {"service/<...>": content},
+    keyed relative to the repo's service/ directory so artifact paths mirror
+    the real file layout."""
+    files = {}
+    for path in sorted(root.rglob("*.py")):
+        if "__pycache__" in path.parts:
+            continue
+        rel = path.relative_to(_REPO_ROOT / "service")
+        files[f"service/{rel.as_posix()}"] = path.read_text(encoding="utf-8")
+    return files
+
+
+def source_files() -> dict:
+    return _read_tree(_SERVICE_APP_ROOT)
+
+
+def test_files() -> dict:
+    return _read_tree(_SERVICE_TESTS_ROOT)
+
 
 REQUIREMENT_TEXT = (
     "We need a URL shortener service. Users should be able to submit a long URL "

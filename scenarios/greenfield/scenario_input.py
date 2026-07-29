@@ -43,6 +43,11 @@ def test_files() -> dict:
     return _read_tree(_SERVICE_TESTS_ROOT)
 
 
+def doc_files() -> dict:
+    readme = _REPO_ROOT / "service" / "README.md"
+    return {"service/README.md": readme.read_text(encoding="utf-8")}
+
+
 REQUIREMENT_TEXT = (
     "We need a URL shortener service. Users should be able to submit a long URL "
     "and get back a short one that redirects to the original when visited. We "

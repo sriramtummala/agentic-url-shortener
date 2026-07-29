@@ -61,15 +61,22 @@ class ApprovalGateHandler:
     table. The first time a stage hits an APPROVAL gate, a pending request
     is created and the stage blocks. Subsequent evaluations (e.g. after the
     executor is re-invoked following a human decision) read the same
-    request back."""
+    request back.
+
+    The approval id is scoped to (stage, gate, incarnation) rather than just
+    (stage, gate): if the stage is later rolled back or re-planned (its
+    incarnation bumps), it gets a brand new pending approval instead of
+    silently inheriting the previous incarnation's decision. A human
+    approving one version of a stage's output must not be read as approving
+    a materially different re-execution of it later."""
 
     def __init__(self, store: StateStore, id_fn, now_fn):
         self.store = store
         self._id_fn = id_fn
         self._now_fn = now_fn
 
-    def evaluate(self, run_id: str, stage: StageDefinition, gate: GateSpec) -> GateResult:
-        approval_id = f"{run_id}:{stage.id}:{gate.id}"
+    def evaluate(self, run_id: str, stage: StageDefinition, gate: GateSpec, incarnation: int) -> GateResult:
+        approval_id = f"{run_id}:{stage.id}:{gate.id}:{incarnation}"
         existing = self.store.get_approval(approval_id)
         if existing is None:
             self.store.request_approval(approval_id, run_id, stage.id, gate.id, self._now_fn())
@@ -100,14 +107,14 @@ class GateRunner:
 
     def evaluate(
         self, run_id: str, stage: StageDefinition, gates: list[GateSpec], phase: str,
-        artifacts: list[ArtifactRef] | None = None,
+        incarnation: int, artifacts: list[ArtifactRef] | None = None,
     ) -> GateResult:
         if not gates:
             return GateResult(gate_id="-", passed=True, blocked=False, reason="no gates defined")
         ctx = GateContext(run_id=run_id, stage=stage, phase=phase, artifacts=artifacts or [])
         for gate in gates:
             if gate.type == GateType.APPROVAL:
-                result = self.approval_handler.evaluate(run_id, stage, gate)
+                result = self.approval_handler.evaluate(run_id, stage, gate, incarnation)
             else:
                 result = self.guardrail_engine.check(gate, ctx)
             if result.blocked:

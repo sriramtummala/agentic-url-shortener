@@ -56,6 +56,7 @@ class Replanner:
         origin_state = run_state.stage_states[changed_stage_id]
         origin_state.status = StageStatus.STALE
         origin_state.stale = True
+        origin_state.incarnation += 1
         self.store.save_stage_state(run_id, origin_state)
         self._log(run_id, changed_stage_id, actor, "replanned", reason)
 
@@ -66,6 +67,7 @@ class Replanner:
                 continue
             ds_state.status = StageStatus.STALE
             ds_state.stale = True
+            ds_state.incarnation += 1
             self.store.save_stage_state(run_id, ds_state)
             self._log(
                 run_id, stage_id, actor, "marked_stale",
@@ -106,6 +108,7 @@ class Replanner:
             if before_state.status != StageStatus.PENDING:
                 before_state.status = StageStatus.STALE
                 before_state.stale = True
+                before_state.incarnation += 1
                 self.store.save_stage_state(run_id, before_state)
 
         self._log(

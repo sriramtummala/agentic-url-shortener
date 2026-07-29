@@ -40,8 +40,9 @@ def build_scenario_input() -> dict:
     test_files = si.test_files()
     if test_files:
         scenario_input["test_files"] = test_files
-    if hasattr(si, "DOC_FILES"):
-        scenario_input["doc_files"] = si.DOC_FILES
+    doc_files = si.doc_files()
+    if doc_files:
+        scenario_input["doc_files"] = doc_files
     return scenario_input
 
 

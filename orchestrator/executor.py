@@ -146,6 +146,7 @@ class Executor:
         stage_state.status = StageStatus.ROLLED_BACK
         stage_state.rollback_count += 1
         stage_state.stale = True
+        stage_state.incarnation += 1
         stage_state.ended_at = now
         self.store.save_stage_state(self.run_id, stage_state)
         self._log_decision(stage_id, actor=actor, action="rolled_back", rationale=reason)
@@ -156,6 +157,7 @@ class Executor:
                 continue
             ds_state.status = StageStatus.STALE
             ds_state.stale = True
+            ds_state.incarnation += 1
             self.store.save_stage_state(self.run_id, ds_state)
             self._log_decision(
                 downstream_id, actor=actor, action="marked_stale",
@@ -215,8 +217,9 @@ class Executor:
 
     def _execute_stage(self, stage_id: str) -> None:
         stage = self.graph.stages[stage_id]
+        incarnation = self.store.load_run(self.run_id).stage_states[stage_id].incarnation
 
-        entry_result = self.gate_runner.evaluate(self.run_id, stage, stage.entry_gates, "entry")
+        entry_result = self.gate_runner.evaluate(self.run_id, stage, stage.entry_gates, "entry", incarnation)
         if entry_result.blocked:
             self._update_stage(stage_id, status=StageStatus.BLOCKED_APPROVAL)
             self._log_decision(
@@ -265,7 +268,7 @@ class Executor:
             if result.success:
                 artifacts = self._persist_artifacts(stage_id, result.outputs)
                 exit_result = self.gate_runner.evaluate(
-                    self.run_id, stage, stage.exit_gates, "exit", artifacts
+                    self.run_id, stage, stage.exit_gates, "exit", incarnation, artifacts
                 )
                 if exit_result.blocked:
                     self._update_stage(stage_id, status=StageStatus.BLOCKED_APPROVAL)

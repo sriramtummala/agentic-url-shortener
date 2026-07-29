@@ -237,6 +237,12 @@ class StageState(BaseModel):
     artifact_ids: list[str] = Field(default_factory=list)
     decision_ids: list[str] = Field(default_factory=list)
     stale: bool = False
+    incarnation: int = 0
+    """Bumped every time this stage is reset for re-execution (rollback or
+    re-plan). Approval-gate ids are scoped to (stage, gate, incarnation) so
+    that a human's sign-off on one incarnation of a stage's work is never
+    silently reused to wave through a later, different incarnation -- see
+    ApprovalGateHandler in orchestrator.gates."""
 
 
 class RunState(BaseModel):

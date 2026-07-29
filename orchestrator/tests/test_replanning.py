@@ -68,6 +68,43 @@ def test_invalidate_downstream_marks_stale_and_reexecutes(tmp_path):
     assert "replanned" in [d.action for d in decisions]
 
 
+def test_approval_does_not_carry_forward_across_incarnations(tmp_path):
+    graph = TaskGraph(
+        id="g",
+        stages={
+            "design": StageDefinition(id="design", name="Design", agent="succeed"),
+            "release": StageDefinition(
+                id="release", name="Release", agent="succeed", depends_on=["design"],
+                high_impact=True,
+                entry_gates=[GateSpec(id="release-approval", type=GateType.APPROVAL, description="sign-off")],
+            ),
+        },
+    )
+    store, executor, agent = _setup(tmp_path, graph)
+    executor.run()
+    first_pending = store.get_pending_approvals("run-1")
+    store.resolve_approval(
+        first_pending[0]["id"], "approved", "human:stummala", "2026-07-28T00:00:01Z", comment="ok"
+    )
+    approved_run = executor.run()
+    assert approved_run.status == RunStatus.COMPLETED
+    assert approved_run.stage_states["release"].status == StageStatus.PASSED
+
+    replanner = Replanner(store)
+    replanner.invalidate_downstream(
+        "run-1", "design", reason="design changed after release was already approved",
+        actor="agent:engineering",
+    )
+
+    reexecuted = executor.run()
+    assert reexecuted.status == RunStatus.PAUSED_APPROVAL
+    assert reexecuted.stage_states["release"].status == StageStatus.BLOCKED_APPROVAL
+
+    second_pending = store.get_pending_approvals("run-1")
+    assert len(second_pending) == 1
+    assert second_pending[0]["id"] != first_pending[0]["id"]
+
+
 def test_insert_stage_blocks_dependent_and_runs_in_order(tmp_path):
     graph = TaskGraph(
         id="g",

@@ -388,10 +388,18 @@ class Executor:
     # -- artifacts -------------------------------------------------------------
 
     def _collect_upstream_artifacts(self, stage: StageDefinition) -> list[ArtifactRef]:
-        artifacts: list[ArtifactRef] = []
+        # get_artifacts returns the full history for a stage (every version
+        # of every path, across every re-execution) -- keep only the latest
+        # version per path so a re-planned stage's agent, or a downstream
+        # agent reading upstream_by_kind, never sees a stale duplicate
+        # alongside the current one.
+        latest_by_path: dict[str, ArtifactRef] = {}
         for dep in stage.depends_on:
-            artifacts.extend(self.store.get_artifacts(self.run_id, stage_id=dep))
-        return artifacts
+            for artifact in self.store.get_artifacts(self.run_id, stage_id=dep):
+                current = latest_by_path.get(artifact.path)
+                if current is None or artifact.version > current.version:
+                    latest_by_path[artifact.path] = artifact
+        return list(latest_by_path.values())
 
     def _persist_artifacts(self, stage_id: str, outputs: list[AgentOutput]) -> list[ArtifactRef]:
         existing = self.store.get_artifacts(self.run_id, stage_id=stage_id)

@@ -14,6 +14,8 @@ def redirect_to_destination(code: str, db: Database = Depends(get_db)) -> Redire
     row = db.get_url(code)
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "short URL not found")
-    if row["expires_at"] is not None and datetime.fromisoformat(row["expires_at"]) <= datetime.now(timezone.utc):
+    now = datetime.now(timezone.utc)
+    if row["expires_at"] is not None and datetime.fromisoformat(row["expires_at"]) <= now:
         raise HTTPException(status.HTTP_410_GONE, "short URL has expired")
+    db.record_click(code, day=now.date().isoformat(), accessed_at=now.isoformat())
     return RedirectResponse(row["destination_url"], status_code=status.HTTP_302_FOUND)

@@ -15,9 +15,20 @@ CREATE TABLE IF NOT EXISTS urls (
     destination_url TEXT NOT NULL,
     owner_token TEXT NOT NULL,
     created_at TEXT NOT NULL,
-    expires_at TEXT
+    expires_at TEXT,
+    click_count INTEGER NOT NULL DEFAULT 0,
+    last_accessed_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS clicks (
+    code TEXT NOT NULL REFERENCES urls(code) ON DELETE CASCADE,
+    day TEXT NOT NULL,
+    count INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (code, day)
 );
 """
+# No migration framework for this prototype: adding columns/tables here only
+# affects freshly created database files. See docs/testing_and_tradeoffs.md.
 
 
 class Database:
@@ -34,6 +45,7 @@ class Database:
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
         return conn
 
     def code_exists(self, code: str) -> bool:
@@ -70,5 +82,30 @@ class Database:
         try:
             conn.execute("DELETE FROM urls WHERE code = ?", (code,))
             conn.commit()
+        finally:
+            conn.close()
+
+    def record_click(self, code: str, day: str, accessed_at: str) -> None:
+        conn = self._connect()
+        try:
+            conn.execute(
+                "UPDATE urls SET click_count = click_count + 1, last_accessed_at = ? WHERE code = ?",
+                (accessed_at, code),
+            )
+            conn.execute(
+                "INSERT INTO clicks (code, day, count) VALUES (?, ?, 1) "
+                "ON CONFLICT(code, day) DO UPDATE SET count = count + 1",
+                (code, day),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    def get_click_series(self, code: str) -> list[sqlite3.Row]:
+        conn = self._connect()
+        try:
+            return conn.execute(
+                "SELECT day, count FROM clicks WHERE code = ? ORDER BY day", (code,)
+            ).fetchall()
         finally:
             conn.close()

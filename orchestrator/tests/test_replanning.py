@@ -144,6 +144,52 @@ def test_inserted_stage_can_carry_approval_gate(tmp_path):
     assert final.stage_states["release"].status == StageStatus.PASSED
 
 
+class RecordingAgent:
+    name = "recording"
+
+    def __init__(self):
+        self.seen_upstream = []
+
+    def run(self, context: AgentContext) -> AgentResult:
+        self.seen_upstream.append(list(context.upstream_artifacts))
+        return AgentResult(
+            success=True,
+            outputs=[AgentOutput(kind="artifact", relative_path=f"{context.stage_id}.txt", content="ok")],
+            rationale="ok",
+        )
+
+
+def test_upstream_artifacts_only_include_latest_version_after_replan(tmp_path):
+    graph = TaskGraph(
+        id="g",
+        stages={
+            "design": StageDefinition(id="design", name="Design", agent="succeed"),
+            "impl": StageDefinition(id="impl", name="Impl", agent="recording", depends_on=["design"]),
+        },
+    )
+    store = StateStore(tmp_path / "state.db")
+    run_state = RunState.initialize("run-1", graph, scenario="test", now="2026-07-28T00:00:00Z")
+    store.create_run(run_state, graph)
+    recorder = RecordingAgent()
+    executor = Executor(
+        graph, store, "run-1", {"succeed": SucceedAgent(), "recording": recorder},
+        artifact_root=tmp_path / "artifacts",
+    )
+
+    executor.run()
+    assert len(recorder.seen_upstream[0]) == 1
+    assert recorder.seen_upstream[0][0].version == 1
+
+    replanner = Replanner(store)
+    replanner.invalidate_downstream("run-1", "design", reason="design changed", actor="human:stummala")
+    executor.run()
+
+    assert len(recorder.seen_upstream) == 2
+    latest_call_artifacts = recorder.seen_upstream[1]
+    assert len(latest_call_artifacts) == 1  # not two -- the stale v1 must not linger alongside v2
+    assert latest_call_artifacts[0].version == 2
+
+
 def test_insert_stage_rejects_unknown_before_id_and_duplicate_id(tmp_path):
     graph = TaskGraph(
         id="g",

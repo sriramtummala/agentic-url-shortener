@@ -31,3 +31,15 @@ class UrlMetadata(BaseModel):
     destination_url: str
     created_at: datetime
     expires_at: Optional[datetime] = None
+
+
+class DailyClicks(BaseModel):
+    day: str
+    count: int
+
+
+class AnalyticsResponse(BaseModel):
+    code: str
+    click_count: int
+    last_accessed_at: Optional[datetime] = None
+    daily_clicks: list[DailyClicks]

@@ -4,7 +4,7 @@ from fastapi import FastAPI
 
 from service.app.config import DB_PATH
 from service.app.db import Database
-from service.app.api import redirect, urls
+from service.app.api import analytics, redirect, urls
 
 
 def create_app(db_path: Optional[str] = None) -> FastAPI:
@@ -18,6 +18,7 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
     # and more importantly, Starlette resolves routes in registration
     # order, so the catch-all would shadow the literal route entirely.
     app.include_router(urls.router)
+    app.include_router(analytics.router)
     app.include_router(redirect.router)
     return app
 

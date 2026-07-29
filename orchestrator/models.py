@@ -105,11 +105,17 @@ class StageDefinition(BaseModel):
     @model_validator(mode="after")
     def _high_impact_requires_approval(self) -> "StageDefinition":
         if self.high_impact:
-            has_approval = any(g.type == GateType.APPROVAL for g in self.entry_gates)
+            # Either gates the stage's start (approve before it runs, e.g. a
+            # release step) or its output (approve what it produced, e.g.
+            # signing off on an interpretation before anything downstream
+            # consumes it) -- both are legitimate places to require a human.
+            has_approval = any(
+                g.type == GateType.APPROVAL for g in (*self.entry_gates, *self.exit_gates)
+            )
             if not has_approval:
                 raise ValueError(
                     f"stage '{self.id}' is marked high_impact but has no "
-                    "APPROVAL entry gate"
+                    "APPROVAL entry or exit gate"
                 )
         return self
 

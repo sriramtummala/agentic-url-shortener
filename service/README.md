@@ -44,6 +44,8 @@ pytest service/tests
 | `URL_SHORTENER_RATE_LIMIT_REFILL_PER_SECOND` | `0.5` | Token-bucket refill rate |
 | `URL_SHORTENER_IDEMPOTENCY_TTL_SECONDS` | `300` | How long an `Idempotency-Key` is remembered |
 | `URL_SHORTENER_REDIRECT_CACHE_SIZE` | `1024` | Max entries in the in-process redirect cache |
+| `URL_SHORTENER_DENYLIST_DOMAINS` | `malware-example.test,phishing-example.test` | Comma-separated list of destination-domain/substring matches rejected at creation time |
+| `URL_SHORTENER_REPORT_THRESHOLD` | `3` | Number of reports before a short URL is auto-flagged and blocked from redirecting |
 
 ## API Reference
 
@@ -56,7 +58,8 @@ Request body:
 `expires_at` is optional and must be in the future. An optional
 `Idempotency-Key` header makes retries of this request safe -- a repeated
 request with the same key returns the original result instead of minting a
-second short code.
+second short code, and does not consume rate-limit budget. Returns `422` if
+`destination_url` matches the configured denylist.
 
 Response (`201 Created`):
 ```json
@@ -74,12 +77,24 @@ delete the URL later. Rate-limited (`429 Too Many Requests`) per client IP.
 ### `GET /{code}` -- redirect
 
 Redirects (`302 Found`) to the original URL and records a click. Returns
-`404` if the code doesn't exist, `410 Gone` if it has expired.
+`404` if the code doesn't exist, `410 Gone` if it has expired, `403` if it
+has been flagged (see the report endpoint below).
 
 ### `GET /api/urls/{code}` -- metadata
 
-Returns the short URL's destination, creation time, and expiry, without
-redirecting or counting as a click. `404`/`410` as above.
+Returns the short URL's destination, creation time, expiry, and
+moderation state (`report_count`, `flagged`), without redirecting or
+counting as a click. `404`/`410` as above.
+
+### `POST /api/urls/{code}/report` -- report a short URL
+
+No request body. Increments the URL's report count; once it reaches
+`URL_SHORTENER_REPORT_THRESHOLD` (default 3), the URL is auto-flagged and
+subsequent redirects return `403` until further notice. There is currently
+no unflagging/appeals endpoint. Response:
+```json
+{"code": "aZ3kQ7x", "report_count": 3, "flagged": true}
+```
 
 ### `GET /api/urls/{code}/analytics` -- usage analytics
 
@@ -106,6 +121,8 @@ Returns `{"status": "ok"}` if the database is reachable, `503` otherwise.
 
 See `docs/testing_and_tradeoffs.md` (repo root) for the full list --
 notably: no schema migration framework (adding columns/tables only affects
-freshly created databases), and the rate limiter/idempotency store/redirect
+freshly created databases); the rate limiter/idempotency store/redirect
 cache are in-process, so they reset on restart and don't coordinate across
-multiple instances.
+multiple instances; and the denylist is a small static list with no
+moderation/appeals workflow for flagged links (see
+`scenarios/ambiguous/scenario_input.py` for why that scope was chosen).

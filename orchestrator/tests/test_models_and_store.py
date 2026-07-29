@@ -80,6 +80,17 @@ def test_high_impact_requires_approval_gate():
         StageDefinition(id="risky", name="Risky", agent="x", high_impact=True)
 
 
+def test_high_impact_accepts_approval_on_exit_gate_too():
+    # Approving a stage's output (e.g. signing off on an interpretation
+    # before anything downstream consumes it) is as legitimate as approving
+    # its start (e.g. a release step) -- the invariant must accept either.
+    stage = StageDefinition(
+        id="requirements", name="Requirements", agent="requirements", high_impact=True,
+        exit_gates=[GateSpec(id="interpretation-approval", type=GateType.APPROVAL, description="sign-off")],
+    )
+    assert stage.high_impact is True
+
+
 def test_downstream_of():
     graph = _toy_graph()
     assert graph.downstream_of("design") == {"impl_api", "impl_docs", "release"}

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 from pathlib import Path
 from typing import Optional
 
@@ -80,10 +81,16 @@ CREATE TABLE IF NOT EXISTS approvals (
 
 
 class StateStore:
+    """Not just persistence: this class is also the executor's concurrency
+    boundary. Stages within a layer run on separate threads, so every method
+    here is serialized behind a single lock -- SQLite's per-connection
+    thread-safety guarantees are otherwise too weak to rely on directly."""
+
     def __init__(self, db_path: str | Path):
         self.db_path = str(db_path)
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(self.db_path)
+        self._lock = threading.RLock()
+        self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._conn.executescript(_SCHEMA)
         self._conn.commit()
@@ -94,7 +101,7 @@ class StateStore:
     # -- runs -------------------------------------------------------------
 
     def create_run(self, run_state: RunState, graph: TaskGraph) -> None:
-        with self._conn:
+        with self._lock, self._conn:
             self._conn.execute(
                 """INSERT INTO runs (run_id, graph_id, graph_json, scenario,
                     status, created_at, updated_at)
@@ -113,50 +120,53 @@ class StateStore:
                 self._save_stage_state_nolock(run_state.run_id, stage_state)
 
     def update_run_status(self, run_id: str, status: str, updated_at: str) -> None:
-        with self._conn:
+        with self._lock, self._conn:
             self._conn.execute(
                 "UPDATE runs SET status = ?, updated_at = ? WHERE run_id = ?",
                 (status, updated_at, run_id),
             )
 
     def load_graph(self, run_id: str) -> TaskGraph:
-        row = self._conn.execute(
-            "SELECT graph_json FROM runs WHERE run_id = ?", (run_id,)
-        ).fetchone()
-        if row is None:
-            raise KeyError(f"no such run: {run_id}")
-        return TaskGraph.model_validate_json(row["graph_json"])
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT graph_json FROM runs WHERE run_id = ?", (run_id,)
+            ).fetchone()
+            if row is None:
+                raise KeyError(f"no such run: {run_id}")
+            return TaskGraph.model_validate_json(row["graph_json"])
 
     def load_run(self, run_id: str) -> RunState:
-        row = self._conn.execute(
-            "SELECT * FROM runs WHERE run_id = ?", (run_id,)
-        ).fetchone()
-        if row is None:
-            raise KeyError(f"no such run: {run_id}")
-        stage_rows = self._conn.execute(
-            "SELECT stage_id, state_json FROM stage_states WHERE run_id = ?",
-            (run_id,),
-        ).fetchall()
-        stage_states = {
-            r["stage_id"]: StageState.model_validate_json(r["state_json"])
-            for r in stage_rows
-        }
-        return RunState(
-            run_id=row["run_id"],
-            graph_id=row["graph_id"],
-            scenario=row["scenario"],
-            status=row["status"],
-            stage_states=stage_states,
-            created_at=row["created_at"],
-            updated_at=row["updated_at"],
-        )
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM runs WHERE run_id = ?", (run_id,)
+            ).fetchone()
+            if row is None:
+                raise KeyError(f"no such run: {run_id}")
+            stage_rows = self._conn.execute(
+                "SELECT stage_id, state_json FROM stage_states WHERE run_id = ?",
+                (run_id,),
+            ).fetchall()
+            stage_states = {
+                r["stage_id"]: StageState.model_validate_json(r["state_json"])
+                for r in stage_rows
+            }
+            return RunState(
+                run_id=row["run_id"],
+                graph_id=row["graph_id"],
+                scenario=row["scenario"],
+                status=row["status"],
+                stage_states=stage_states,
+                created_at=row["created_at"],
+                updated_at=row["updated_at"],
+            )
 
     def list_runs(self) -> list[dict]:
-        rows = self._conn.execute(
-            "SELECT run_id, graph_id, scenario, status, created_at, updated_at "
-            "FROM runs ORDER BY created_at"
-        ).fetchall()
-        return [dict(r) for r in rows]
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT run_id, graph_id, scenario, status, created_at, updated_at "
+                "FROM runs ORDER BY created_at"
+            ).fetchall()
+            return [dict(r) for r in rows]
 
     # -- stage state --------------------------------------------------------
 
@@ -169,13 +179,13 @@ class StateStore:
         )
 
     def save_stage_state(self, run_id: str, stage_state: StageState) -> None:
-        with self._conn:
+        with self._lock, self._conn:
             self._save_stage_state_nolock(run_id, stage_state)
 
     # -- decisions (lineage) ------------------------------------------------
 
     def record_decision(self, decision: DecisionRecord) -> None:
-        with self._conn:
+        with self._lock, self._conn:
             self._conn.execute(
                 """INSERT INTO decisions (id, run_id, stage_id, timestamp, record_json)
                    VALUES (?, ?, ?, ?, ?)""",
@@ -189,23 +199,24 @@ class StateStore:
             )
 
     def get_decisions(self, run_id: str, stage_id: Optional[str] = None) -> list[DecisionRecord]:
-        if stage_id:
-            rows = self._conn.execute(
-                "SELECT record_json FROM decisions WHERE run_id = ? AND stage_id = ? "
-                "ORDER BY timestamp",
-                (run_id, stage_id),
-            ).fetchall()
-        else:
-            rows = self._conn.execute(
-                "SELECT record_json FROM decisions WHERE run_id = ? ORDER BY timestamp",
-                (run_id,),
-            ).fetchall()
-        return [DecisionRecord.model_validate_json(r["record_json"]) for r in rows]
+        with self._lock:
+            if stage_id:
+                rows = self._conn.execute(
+                    "SELECT record_json FROM decisions WHERE run_id = ? AND stage_id = ? "
+                    "ORDER BY timestamp",
+                    (run_id, stage_id),
+                ).fetchall()
+            else:
+                rows = self._conn.execute(
+                    "SELECT record_json FROM decisions WHERE run_id = ? ORDER BY timestamp",
+                    (run_id,),
+                ).fetchall()
+            return [DecisionRecord.model_validate_json(r["record_json"]) for r in rows]
 
     # -- artifacts ------------------------------------------------------------
 
     def record_artifact_for_run(self, run_id: str, artifact: ArtifactRef) -> None:
-        with self._conn:
+        with self._lock, self._conn:
             self._conn.execute(
                 """INSERT INTO artifacts (id, run_id, stage_id, record_json)
                    VALUES (?, ?, ?, ?)""",
@@ -213,23 +224,24 @@ class StateStore:
             )
 
     def get_artifacts(self, run_id: str, stage_id: Optional[str] = None) -> list[ArtifactRef]:
-        if stage_id:
-            rows = self._conn.execute(
-                "SELECT record_json FROM artifacts WHERE run_id = ? AND stage_id = ?",
-                (run_id, stage_id),
-            ).fetchall()
-        else:
-            rows = self._conn.execute(
-                "SELECT record_json FROM artifacts WHERE run_id = ?", (run_id,)
-            ).fetchall()
-        return [ArtifactRef.model_validate_json(r["record_json"]) for r in rows]
+        with self._lock:
+            if stage_id:
+                rows = self._conn.execute(
+                    "SELECT record_json FROM artifacts WHERE run_id = ? AND stage_id = ?",
+                    (run_id, stage_id),
+                ).fetchall()
+            else:
+                rows = self._conn.execute(
+                    "SELECT record_json FROM artifacts WHERE run_id = ?", (run_id,)
+                ).fetchall()
+            return [ArtifactRef.model_validate_json(r["record_json"]) for r in rows]
 
     # -- audit log ------------------------------------------------------------
 
     def append_audit_event(
         self, run_id: str, timestamp: str, level: str, message: str, data: Optional[dict] = None
     ) -> None:
-        with self._conn:
+        with self._lock, self._conn:
             self._conn.execute(
                 """INSERT INTO audit_events (run_id, timestamp, level, message, data_json)
                    VALUES (?, ?, ?, ?, ?)""",
@@ -237,24 +249,25 @@ class StateStore:
             )
 
     def get_audit_events(self, run_id: str) -> list[dict]:
-        rows = self._conn.execute(
-            "SELECT seq, timestamp, level, message, data_json FROM audit_events "
-            "WHERE run_id = ? ORDER BY seq",
-            (run_id,),
-        ).fetchall()
-        out = []
-        for r in rows:
-            d = dict(r)
-            d["data"] = json.loads(d.pop("data_json")) if d.get("data_json") else None
-            out.append(d)
-        return out
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT seq, timestamp, level, message, data_json FROM audit_events "
+                "WHERE run_id = ? ORDER BY seq",
+                (run_id,),
+            ).fetchall()
+            out = []
+            for r in rows:
+                d = dict(r)
+                d["data"] = json.loads(d.pop("data_json")) if d.get("data_json") else None
+                out.append(d)
+            return out
 
     # -- approvals ------------------------------------------------------------
 
     def request_approval(
         self, approval_id: str, run_id: str, stage_id: str, gate_id: str, requested_at: str
     ) -> None:
-        with self._conn:
+        with self._lock, self._conn:
             self._conn.execute(
                 """INSERT INTO approvals (id, run_id, stage_id, gate_id, status, requested_at)
                    VALUES (?, ?, ?, ?, 'pending', ?)""",
@@ -269,7 +282,7 @@ class StateStore:
         resolved_at: str,
         comment: Optional[str] = None,
     ) -> None:
-        with self._conn:
+        with self._lock, self._conn:
             self._conn.execute(
                 """UPDATE approvals SET status = ?, resolved_by = ?, resolved_at = ?,
                    comment = ? WHERE id = ?""",
@@ -277,19 +290,21 @@ class StateStore:
             )
 
     def get_pending_approvals(self, run_id: Optional[str] = None) -> list[dict]:
-        if run_id:
-            rows = self._conn.execute(
-                "SELECT * FROM approvals WHERE run_id = ? AND status = 'pending'",
-                (run_id,),
-            ).fetchall()
-        else:
-            rows = self._conn.execute(
-                "SELECT * FROM approvals WHERE status = 'pending'"
-            ).fetchall()
-        return [dict(r) for r in rows]
+        with self._lock:
+            if run_id:
+                rows = self._conn.execute(
+                    "SELECT * FROM approvals WHERE run_id = ? AND status = 'pending'",
+                    (run_id,),
+                ).fetchall()
+            else:
+                rows = self._conn.execute(
+                    "SELECT * FROM approvals WHERE status = 'pending'"
+                ).fetchall()
+            return [dict(r) for r in rows]
 
     def get_approval(self, approval_id: str) -> Optional[dict]:
-        row = self._conn.execute(
-            "SELECT * FROM approvals WHERE id = ?", (approval_id,)
-        ).fetchone()
-        return dict(row) if row else None
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM approvals WHERE id = ?", (approval_id,)
+            ).fetchone()
+            return dict(row) if row else None
